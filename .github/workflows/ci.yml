@@ -1,0 +1,51 @@
+# Workflow syntax for GitHub Actions:
+# https://docs.github.com/actions/reference/workflow-syntax-for-github-actions
+
+name: Hyperion CI
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    name: ${ { matrix.config.name } }
+    runs-on: ${ { matrix.config.os } }
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "Linux",
+              os: ubuntu-16.04
+            }
+          - {
+              name: "macOS",
+              os: macos-10.15
+            }
+          - {
+              name: "Windows",
+              os: windows-2019
+            }
+    steps:
+    - name: "Checkout nullsecuritynet/tools"
+      uses: actions/checkout@v2
+      with:
+        repository: "nullsecuritynet/tools"
+        ref: "0d296696a9fdf16b9414fa00557a9a17c5c7e685"
+        fetch-depth: "1"
+        lfs: "true"
+        submodules: "recursive"
+    - name: "Compile nullsecuritynet/tools/binary/hyperion/source/*"
+      shell: cmake -P {0}
+      run: |
+        if ("${{ runner.os }}" STREQUAL "Linux")
+          message("Linux...")
+        elseif("${{ runner.os }}" STREQUAL "macOS")
+          message("macOS...")
+        elseif("${{ runner.os }}" STREQUAL "Windows")
+          message("Windows...")
+        else()
+          message(FATAL_ERROR "Unknown OS - ${{ runner.os }}!!!")
+        endif()
