@@ -1,0 +1,8 @@
+# Defalt build folder
+build/*
+
+# Vagrant cache
+.vagrant/*
+
+# Visual Studio Code
+.vscode/*

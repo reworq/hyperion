@@ -1,51 +1,93 @@
 # Workflow syntax for GitHub Actions:
 # https://docs.github.com/actions/reference/workflow-syntax-for-github-actions
 
-name: Hyperion CI
+name: "Hyperion CI"
 
 on:
   push:
     branches:
       - master
+      - nightly
+      - stable
 
 jobs:
   build:
-    name: ${ { matrix.config.name } }
-    runs-on: ${ { matrix.config.os } }
+    name: "Build"
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        config:
-          - {
-              name: "Linux",
-              os: ubuntu-16.04
-            }
-          - {
-              name: "macOS",
-              os: macos-10.15
-            }
-          - {
-              name: "Windows",
-              os: windows-2019
-            }
+        os: [
+          ubuntu-latest,
+          windows-latest
+        ]
+        toolchain: [
+          "linux-mingw-w32",
+          "linux-mingw-w64",
+          "vs-16-2019-cxx14",
+          "vs-16-2019-win64-cxx14"
+        ]
+        exclude:
+        - os: ubuntu-latest
+          toolchain: "vs-16-2019-cxx14"
+        - os: ubuntu-latest
+          toolchain: "vs-16-2019-win64-cxx14"
+        - os: windows-latest
+          toolchain: "linux-mingw-w32"
+        - os: windows-latest
+          toolchain: "linux-mingw-w64"
+        include:
+        - os: ubuntu-latest
+          toolchain: "linux-mingw-w32"
+          cmake_flags: -G "Unix Makefiles"
+        - os: ubuntu-latest
+          toolchain: "linux-mingw-w64"
+          cmake_flags: -G "Unix Makefiles"
+        - os: windows-latest
+          toolchain: "vs-16-2019-cxx14"
+          cmake_flags: -G "Visual Studio 16 2019" -A Win32
+        - os: windows-latest
+          toolchain: "vs-16-2019-win64-cxx14"
+          cmake_flags: -G "Visual Studio 16 2019" -A x86_64
     steps:
-    - name: "Checkout nullsecuritynet/tools"
+    - name: "Bootstrap (Linux only)"
+      if: ${{ matrix.os == 'ubuntu-latest' }}
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git mingw-w64 mingw-w64-common wget
+    - name: "Checkout"
       uses: actions/checkout@v2
       with:
-        repository: "nullsecuritynet/tools"
-        ref: "0d296696a9fdf16b9414fa00557a9a17c5c7e685"
         fetch-depth: "1"
         lfs: "true"
         submodules: "recursive"
-    - name: "Compile nullsecuritynet/tools/binary/hyperion/source/*"
-      shell: cmake -P {0}
+    - name: "CMake - Configure"
+      shell: pwsh
+      run: >
+        cmake
+        ${{ matrix.cmake_flags }}
+        -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}\cmake\polly\${{ matrix.toolchain }}.cmake"
+        -S "${{ github.workspace }}"
+        -B "${{ github.workspace }}\build"
+    - name: "CMake - Build"
+      shell: pwsh
       run: |
-        if ("${{ runner.os }}" STREQUAL "Linux")
-          message("Linux...")
-        elseif("${{ runner.os }}" STREQUAL "macOS")
-          message("macOS...")
-        elseif("${{ runner.os }}" STREQUAL "Windows")
-          message("Windows...")
-        else()
-          message(FATAL_ERROR "Unknown OS - ${{ runner.os }}!!!")
-        endif()
+        cd "${{ github.workspace }}\build"
+        cmake --build . --config Release --target hyperion
+    - name: "CMake - Check (Windows only)"
+      if: ${{ matrix.os == 'windows-latest' }}
+      shell: pwsh
+      run: |
+        cd "${{ github.workspace }}\build"
+        echo "TODO: Add some basic tests (ONLY for Windows)!"
+    - name: "CMake - Deploy"
+      shell: pwsh
+      run: |
+        cd "${{ github.workspace }}\build"
+        cmake --build . --config Release --target package
+    - name: "Upload Artifacts"
+      uses: actions/upload-artifact@v2
+      with:
+        name: "${{ github.sha }}-${{ matrix.toolchain }}"
+        path: "${{ github.workspace }}/build/dist/hyperion-v*.zip"
+        if-no-files-found: error
